@@ -2,10 +2,12 @@ from datetime import datetime, timedelta, timezone
 import os
 from typing import Any, Dict, List, Union, Literal
 
-from fastapi import FastAPI, HTTPException, Header, Depends
+from fastapi import FastAPI, HTTPException, Header, Depends, Body
 from fastapi.middleware.cors import CORSMiddleware
 from google.cloud import firestore
 from pydantic import BaseModel
+import io
+import csv
 
 
 def utc_now() -> datetime:
@@ -305,3 +307,57 @@ async def record_attempts(req: AttemptBatchRequest, _auth=Depends(require_auth))
             cards.append(card_doc_to_model(s))
 
     return AttemptBatchResponse(updated=len(updated_ids), cards=cards, errors=errors)
+
+
+@app.post("/cards/csv", status_code=201, response_model=InsertResponse)
+async def add_cards_csv(
+    data: bytes = Body(..., media_type="text/csv"),
+    skip_header: bool = False,
+    _auth=Depends(require_auth),
+):
+    try:
+        text = data.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="CSV must be UTF-8 encoded")
+
+    reader = csv.reader(io.StringIO(text))
+    rows = list(reader)
+    if skip_header and rows:
+        rows = rows[1:]
+
+    normalized: List[Dict[str, str]] = []
+    for idx, row in enumerate(rows, start=1):
+        if not row or len(row) < 2:
+            # ignore short/blank rows
+            continue
+        front = (row[0] or "").strip()
+        back = (row[1] or "").strip()
+        if not front or not back:
+            # skip empty values
+            continue
+        normalized.append({"front": front, "back": back})
+
+    if not normalized:
+        raise HTTPException(status_code=400, detail="No valid rows found (need at least two columns: front, back)")
+
+    client = get_firestore_client()
+    batch = client.batch()
+    now = utc_now()
+    ids: List[str] = []
+    for it in normalized:
+        doc_ref = client.collection("cards").document()  # auto-id
+        ids.append(doc_ref.id)
+        batch.set(
+            doc_ref,
+            {
+                "front": it["front"],
+                "back": it["back"],
+                "created_at": now,
+                "easiness": 2.5,
+                "interval_days": 0,
+                "repetitions": 0,
+                "due_at": now,
+            },
+        )
+    batch.commit()
+    return InsertResponse(inserted=len(ids), ids=ids)

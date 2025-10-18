@@ -164,6 +164,51 @@ paths:
         '400':
           description: Invalid input
 
+  /cards/csv:
+    post:
+      operationId: addCardsCsv
+      tags: [flashcards]
+      summary: Add cards from CSV
+      description: |
+        Bulk insert cards from CSV. Column 0 is the card front, Column 1 is the back.
+        Expects UTF-8 text/csv. Optionally skip the first row as a header.
+      parameters:
+        - in: query
+          name: skip_header
+          schema:
+            type: boolean
+            default: false
+          description: If true, skip the first CSV row as a header.
+      requestBody:
+        required: true
+        content:
+          text/csv:
+            schema:
+              type: string
+            examples:
+              simple:
+                value: |
+                  front,back
+                  Capital of France?,Paris
+                  2+2,4
+      responses:
+        '201':
+          description: Cards created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  inserted:
+                    type: integer
+                  ids:
+                    type: array
+                    items:
+                      type: string
+                required: [inserted, ids]
+        '400':
+          description: Invalid CSV
+
   /attempts:
     post:
       operationId: recordAttempts

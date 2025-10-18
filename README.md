@@ -21,6 +21,11 @@ Endpoints
     - `[ { "front": "A", "back": "B" }, { "front": "C", "back": "D" } ]`
   - Response: `{ inserted, ids }`
 
+- `POST /cards/csv`
+  - Bulk add from CSV. Column 0 is front, column 1 is back.
+  - Accepts UTF-8 `text/csv`. Optional query `skip_header=true` to skip the first row.
+  - Response: `{ inserted, ids }`
+
 - `POST /attempts`
   - Records multiple attempts in one request.
   - Body: `{ "attempts": [ { "card_id": "<id>", "rating": "good" }, { "card_id": "<id2>", "rating": 1 } ] }`
@@ -120,6 +125,19 @@ Record multiple attempts:
 ```
 $body = @{ attempts = @(@{card_id='<ID1>';rating='good'}, @{card_id='<ID2>';rating=1}) } | ConvertTo-Json
 curl -Method POST -Uri http://127.0.0.1:8000/attempts -H 'Authorization: Bearer YOUR_KEY' -ContentType 'application/json' -Body $body
+
+CSV bulk upload:
+
+```
+# Using curl
+curl -X POST "http://127.0.0.1:8000/cards/csv?skip_header=true" \
+  -H "Authorization: Bearer YOUR_KEY" \
+  -H "Content-Type: text/csv" \
+  --data-binary @cards.csv
+
+# Using the helper script
+python scripts/upload_csv.py --base http://127.0.0.1:8000 --key YOUR_KEY --file cards.csv --skip-header
+```
 ```
 ```
 
