@@ -54,7 +54,7 @@ jobs:
             --image "$IMAGE_URI" \
             --region "$REGION" \
             --platform managed \
-            --allow-unauthenticated=${{ 'true' }} \
+            --allow-unauthenticated \
             --quiet \
             --set-env-vars "API_KEYS=${{ secrets.API_KEYS }}"
 
