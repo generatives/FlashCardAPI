@@ -9,7 +9,7 @@ env:
   REGION: ${{ vars.GCP_REGION }}
   PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
   AR_REPO: ${{ vars.ARTIFACT_REPO }} # e.g. flashcardapi
-  REGISTRY: ${{ env.REGION }}-docker.pkg.dev
+  REGISTRY: ${{ vars.GCP_REGION }}-docker.pkg.dev
 
 jobs:
   build:
