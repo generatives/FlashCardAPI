@@ -21,11 +21,6 @@ Endpoints
     - `[ { "front": "A", "back": "B" }, { "front": "C", "back": "D" } ]`
   - Response: `{ inserted, ids }`
 
-- `POST /attempt`
-  - Records an attempt and updates schedule using SM‑2.
-  - Body: `{ "card_id": "<doc id>", "rating": 0..5 | "again"|"hard"|"good"|"easy" }`
-  - Response: `{ card: { ...updated card... } }`
-
 - `POST /attempts`
   - Records multiple attempts in one request.
   - Body: `{ "attempts": [ { "card_id": "<id>", "rating": "good" }, { "card_id": "<id2>", "rating": 1 } ] }`
