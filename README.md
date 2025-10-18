@@ -26,6 +26,11 @@ Endpoints
   - Body: `{ "card_id": "<doc id>", "rating": 0..5 | "again"|"hard"|"good"|"easy" }`
   - Response: `{ card: { ...updated card... } }`
 
+- `POST /attempts`
+  - Records multiple attempts in one request.
+  - Body: `{ "attempts": [ { "card_id": "<id>", "rating": "good" }, { "card_id": "<id2>", "rating": 1 } ] }`
+  - Response: `{ updated, cards: [ ...updated cards... ], errors: [ { card_id?, index?, error } ] }`
+
 - `GET /health`
   - Health check. Returns `{ ok: true }`.
 
@@ -114,6 +119,13 @@ Record attempt (good):
 
 ```
 curl -Method POST -Uri http://127.0.0.1:8000/attempt -H 'Authorization: Bearer YOUR_KEY' -ContentType 'application/json' -Body '{"card_id":"<PUT_ID>","rating":"good"}'
+
+Record multiple attempts:
+
+```
+$body = @{ attempts = @(@{card_id='<ID1>';rating='good'}, @{card_id='<ID2>';rating=1}) } | ConvertTo-Json
+curl -Method POST -Uri http://127.0.0.1:8000/attempts -H 'Authorization: Bearer YOUR_KEY' -ContentType 'application/json' -Body $body
+```
 ```
 
 Notes

@@ -263,3 +263,96 @@ async def record_attempt(req: AttemptRequest, _auth=Depends(require_auth)):
 
     updated = doc_ref.get()
     return CardResponse(card=card_doc_to_model(updated))
+
+
+class AttemptBatchItem(BaseModel):
+    card_id: str
+    rating: Union[int, Literal["again", "hard", "ok", "good", "easy"]]
+
+
+class AttemptBatchRequest(BaseModel):
+    attempts: List[AttemptBatchItem]
+
+
+class AttemptBatchError(BaseModel):
+    card_id: str | None = None
+    index: int | None = None
+    error: str
+
+
+class AttemptBatchResponse(BaseModel):
+    updated: int
+    cards: List[Card]
+    errors: List[AttemptBatchError]
+
+
+@app.post("/attempts", response_model=AttemptBatchResponse)
+async def record_attempts(req: AttemptBatchRequest, _auth=Depends(require_auth)):
+    if not req.attempts:
+        raise HTTPException(status_code=400, detail="'attempts' must be a non-empty array")
+
+    grouped: Dict[str, List[int]] = {}
+    errors: List[AttemptBatchError] = []
+
+    for idx, item in enumerate(req.attempts, start=1):
+        cid = item.card_id.strip()
+        if not cid:
+            errors.append(AttemptBatchError(index=idx, error="Missing card_id"))
+            continue
+        try:
+            q = rating_to_quality(item.rating)
+        except ValueError as e:
+            errors.append(AttemptBatchError(card_id=cid, index=idx, error=str(e)))
+            continue
+        grouped.setdefault(cid, []).append(q)
+
+    if not grouped and errors:
+        return AttemptBatchResponse(updated=0, cards=[], errors=errors)
+
+    client = get_firestore_client()
+    batch = client.batch()
+    now = utc_now()
+    updated_ids: List[str] = []
+
+    for cid, qualities in grouped.items():
+        doc_ref = client.collection("cards").document(cid)
+        snap = doc_ref.get()
+        if not snap.exists:
+            errors.append(AttemptBatchError(card_id=cid, error="Card not found"))
+            continue
+        data = snap.to_dict() or {}
+        easiness = float(data.get("easiness", 2.5))
+        repetitions = int(data.get("repetitions", 0))
+        interval_days = int(data.get("interval_days", 0))
+
+        for q in qualities:
+            easiness, repetitions, interval_days = sm2_update(easiness, repetitions, interval_days, q)
+
+        due = now + timedelta(days=interval_days)
+
+        batch.update(
+            doc_ref,
+            {
+                "easiness": easiness,
+                "repetitions": repetitions,
+                "interval_days": interval_days,
+                "due_at": due,
+            },
+        )
+
+        for q in qualities:
+            attempts_ref = doc_ref.collection("attempts").document()
+            batch.set(attempts_ref, {"rating": q, "timestamp": now})
+
+        updated_ids.append(cid)
+
+    if updated_ids:
+        batch.commit()
+
+    cards: List[Card] = []
+    for cid in updated_ids:
+        s = client.collection("cards").document(cid).get()
+        if s.exists:
+            cards.append(card_doc_to_model(s))
+
+    return AttemptBatchResponse(updated=len(updated_ids), cards=cards, errors=errors)

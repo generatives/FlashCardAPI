@@ -1,4 +1,4 @@
-openapi: 3.0.3
+openapi: 3.1.1
 info:
   title: FlashCardAPI
   version: "0.2.0"
@@ -6,10 +6,8 @@ info:
     Spaced-repetition Flash Card API backed by Firestore.
     Auth: API Key via `X-API-Key` or `Authorization: Bearer <KEY>`.
 servers:
-  - url: https://YOUR_CLOUD_RUN_URL
+  - url: https://flash-card-api-268596976051.us-central1.run.app
     description: Cloud Run base URL (replace with your service URL)
-  - url: http://localhost:8000
-    description: Local development
 tags:
   - name: flashcards
     description: Flash card operations
@@ -20,10 +18,6 @@ components:
       in: header
       name: X-API-Key
       description: API key sent as X-API-Key header
-    BearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: API Key
   schemas:
     Card:
       type: object
@@ -75,6 +69,7 @@ security:
 paths:
   /health:
     get:
+      operationId: healthCheck
       tags: [flashcards]
       summary: Health check
       description: Returns ok=true. No authentication required.
@@ -94,6 +89,7 @@ paths:
 
   /scheduled:
     get:
+      operationId: getScheduledCards
       tags: [flashcards]
       summary: Get cards due for review
       parameters:
@@ -134,23 +130,21 @@ paths:
 
   /cards:
     post:
+      operationId: addCards
       tags: [flashcards]
       summary: Add new cards
+      description: |
+        Accepts a single card object. The server also supports sending an array of card objects,
+        but this schema declares the single-object form to satisfy tools requiring object bodies.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              oneOf:
-                - $ref: '#/components/schemas/CardCreate'
-                - type: array
-                  items:
-                    $ref: '#/components/schemas/CardCreate'
+              $ref: '#/components/schemas/CardCreate'
             examples:
               single:
                 value: { front: "Capital of France?", back: "Paris" }
-              multiple:
-                value: [ { front: "A", back: "B" }, { front: "C", back: "D" } ]
       responses:
         '201':
           description: Cards created
@@ -172,8 +166,10 @@ paths:
 
   /attempt:
     post:
+      operationId: recordAttempt
       tags: [flashcards]
       summary: Record an attempt and update the schedule
+      x-openai-isConsequential: false
       requestBody:
         required: true
         content:
@@ -201,3 +197,56 @@ paths:
         '404':
           description: Card not found
 
+  /attempts:
+    post:
+      operationId: recordAttempts
+      tags: [flashcards]
+      summary: Record multiple attempts and update schedules
+      x-openai-isConsequential: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                attempts:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/AttemptRequest'
+              required: [attempts]
+            examples:
+              many:
+                value:
+                  attempts:
+                    - { card_id: "abc123", rating: "good" }
+                    - { card_id: "def456", rating: 1 }
+      responses:
+        '200':
+          description: Updated cards and any errors
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  updated:
+                    type: integer
+                  cards:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Card'
+                  errors:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        card_id:
+                          type: string
+                          nullable: true
+                        index:
+                          type: integer
+                          nullable: true
+                        error:
+                          type: string
+                      required: [error]
+                required: [updated, cards, errors]
