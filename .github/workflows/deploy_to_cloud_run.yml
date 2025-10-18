@@ -2,23 +2,6 @@ name: Deploy to Cloud Run
 
 on:
   workflow_dispatch:
-    inputs:
-      image_tag:
-        description: "Image tag (defaults to commit SHA)"
-        required: false
-      service_name:
-        description: "Cloud Run service name"
-        required: false
-      region:
-        description: "GCP region"
-        required: false
-      project_id:
-        description: "GCP project id"
-        required: false
-      allow_unauthenticated:
-        description: "Allow unauthenticated (true/false)"
-        required: false
-        default: "true"
 
 env:
   DEFAULT_SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
@@ -48,11 +31,10 @@ jobs:
       - name: Determine parameters
         id: params
         run: |
-          REGION="${{ github.event.inputs.region || env.DEFAULT_REGION }}"
-          PROJECT="${{ github.event.inputs.project_id || env.DEFAULT_PROJECT }}"
-          SERVICE="${{ github.event.inputs.service_name || env.DEFAULT_SERVICE }}"
-          TAG_INPUT="${{ github.event.inputs.image_tag }}"
-          if [ -z "$TAG_INPUT" ]; then TAG_INPUT='${{ github.sha }}'; fi
+          REGION="${{ env.DEFAULT_REGION }}"
+          PROJECT="${{ env.DEFAULT_PROJECT }}"
+          SERVICE="${{ env.DEFAULT_SERVICE }}"
+          TAG_INPUT='${{ github.sha }}'
           echo "region=$REGION" >> $GITHUB_OUTPUT
           echo "project=$PROJECT" >> $GITHUB_OUTPUT
           echo "service=$SERVICE" >> $GITHUB_OUTPUT
@@ -72,7 +54,7 @@ jobs:
             --image "$IMAGE_URI" \
             --region "$REGION" \
             --platform managed \
-            --allow-unauthenticated=${{ github.event.inputs.allow_unauthenticated || 'true' }} \
+            --allow-unauthenticated=${{ 'true' }} \
             --quiet \
             --set-env-vars "API_KEYS=${{ secrets.API_KEYS }}"
 
