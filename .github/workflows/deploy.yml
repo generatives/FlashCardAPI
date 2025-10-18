@@ -1,0 +1,84 @@
+name: Deploy to Cloud Run
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag (defaults to commit SHA)"
+        required: false
+      service_name:
+        description: "Cloud Run service name"
+        required: false
+      region:
+        description: "GCP region"
+        required: false
+      project_id:
+        description: "GCP project id"
+        required: false
+      allow_unauthenticated:
+        description: "Allow unauthenticated (true/false)"
+        required: false
+        default: "true"
+
+env:
+  DEFAULT_SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
+  DEFAULT_REGION: ${{ vars.GCP_REGION }}
+  DEFAULT_PROJECT: ${{ vars.GCP_PROJECT_ID }}
+  IMAGE_NAME: flashcardapi
+  AR_REPO: ${{ vars.ARTIFACT_REPO }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Auth to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up gcloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          version: '>= 466.0.0'
+
+      - name: Determine parameters
+        id: params
+        run: |
+          REGION="${{ github.event.inputs.region || env.DEFAULT_REGION }}"
+          PROJECT="${{ github.event.inputs.project_id || env.DEFAULT_PROJECT }}"
+          SERVICE="${{ github.event.inputs.service_name || env.DEFAULT_SERVICE }}"
+          TAG_INPUT="${{ github.event.inputs.image_tag }}"
+          if [ -z "$TAG_INPUT" ]; then TAG_INPUT='${{ github.sha }}'; fi
+          echo "region=$REGION" >> $GITHUB_OUTPUT
+          echo "project=$PROJECT" >> $GITHUB_OUTPUT
+          echo "service=$SERVICE" >> $GITHUB_OUTPUT
+          echo "tag=$TAG_INPUT" >> $GITHUB_OUTPUT
+
+      - name: Deploy to Cloud Run
+        run: |
+          REGION='${{ steps.params.outputs.region }}'
+          PROJECT='${{ steps.params.outputs.project }}'
+          SERVICE='${{ steps.params.outputs.service }}'
+          TAG='${{ steps.params.outputs.tag }}'
+          REGISTRY="$REGION-docker.pkg.dev"
+          IMAGE_URI="$REGISTRY/$PROJECT/${{ env.AR_REPO }}/${{ env.IMAGE_NAME }}:$TAG"
+          echo "Deploying $IMAGE_URI to $SERVICE in $REGION/$PROJECT"
+          gcloud config set project "$PROJECT"
+          gcloud run deploy "$SERVICE" \
+            --image "$IMAGE_URI" \
+            --region "$REGION" \
+            --platform managed \
+            --allow-unauthenticated=${{ github.event.inputs.allow_unauthenticated || 'true' }} \
+            --quiet \
+            --set-env-vars "API_KEYS=${{ secrets.API_KEYS }}"
+
+      - name: Service URL
+        run: |
+          URL=$(gcloud run services describe "${{ steps.params.outputs.service }}" --region "${{ steps.params.outputs.region }}" --format 'value(status.url)')
+          echo "Service URL: $URL" >> $GITHUB_STEP_SUMMARY
+

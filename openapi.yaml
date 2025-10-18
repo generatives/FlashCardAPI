@@ -1,0 +1,203 @@
+openapi: 3.0.3
+info:
+  title: FlashCardAPI
+  version: "0.2.0"
+  description: |
+    Spaced-repetition Flash Card API backed by Firestore.
+    Auth: API Key via `X-API-Key` or `Authorization: Bearer <KEY>`.
+servers:
+  - url: https://YOUR_CLOUD_RUN_URL
+    description: Cloud Run base URL (replace with your service URL)
+  - url: http://localhost:8000
+    description: Local development
+tags:
+  - name: flashcards
+    description: Flash card operations
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key sent as X-API-Key header
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: API Key
+  schemas:
+    Card:
+      type: object
+      properties:
+        id:
+          type: string
+        front:
+          type: string
+        back:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        easiness:
+          type: number
+        interval_days:
+          type: integer
+        repetitions:
+          type: integer
+        due_at:
+          type: string
+          format: date-time
+      required: [id, front, back, created_at, easiness, interval_days, repetitions, due_at]
+    CardCreate:
+      type: object
+      properties:
+        front:
+          type: string
+        back:
+          type: string
+      required: [front, back]
+    AttemptRequest:
+      type: object
+      properties:
+        card_id:
+          type: string
+        rating:
+          oneOf:
+            - type: integer
+              minimum: 0
+              maximum: 5
+            - type: string
+              enum: [again, hard, ok, good, easy]
+      required: [card_id, rating]
+security:
+  # Either X-API-Key or Bearer will satisfy auth
+  - ApiKeyAuth: []
+  - BearerAuth: []
+paths:
+  /health:
+    get:
+      tags: [flashcards]
+      summary: Health check
+      description: Returns ok=true. No authentication required.
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                required: [ok]
+              example: { ok: true }
+
+  /scheduled:
+    get:
+      tags: [flashcards]
+      summary: Get cards due for review
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 20
+          description: Max number of cards to return (1-500)
+      responses:
+        '200':
+          description: Cards due now
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  cards:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Card'
+                  count:
+                    type: integer
+                required: [cards, count]
+              example:
+                cards:
+                  - id: "abc123"
+                    front: "Capital of France?"
+                    back: "Paris"
+                    created_at: "2024-01-01T12:00:00Z"
+                    easiness: 2.5
+                    interval_days: 0
+                    repetitions: 0
+                    due_at: "2024-01-01T12:00:00Z"
+                count: 1
+
+  /cards:
+    post:
+      tags: [flashcards]
+      summary: Add new cards
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/CardCreate'
+                - type: array
+                  items:
+                    $ref: '#/components/schemas/CardCreate'
+            examples:
+              single:
+                value: { front: "Capital of France?", back: "Paris" }
+              multiple:
+                value: [ { front: "A", back: "B" }, { front: "C", back: "D" } ]
+      responses:
+        '201':
+          description: Cards created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  inserted:
+                    type: integer
+                  ids:
+                    type: array
+                    items:
+                      type: string
+                required: [inserted, ids]
+              example: { inserted: 2, ids: ["abc123", "def456"] }
+        '400':
+          description: Invalid input
+
+  /attempt:
+    post:
+      tags: [flashcards]
+      summary: Record an attempt and update the schedule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AttemptRequest'
+            examples:
+              good:
+                value: { card_id: "abc123", rating: "good" }
+              again:
+                value: { card_id: "abc123", rating: 1 }
+      responses:
+        '200':
+          description: Updated card returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  card:
+                    $ref: '#/components/schemas/Card'
+                required: [card]
+        '400':
+          description: Invalid input
+        '404':
+          description: Card not found
+
