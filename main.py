@@ -94,11 +94,6 @@ class CardCreate(BaseModel):
     back: str
 
 
-class AttemptRequest(BaseModel):
-    card_id: str
-    rating: Union[int, Literal["again", "hard", "ok", "good", "easy"]]
-
-
 class ScheduledResponse(BaseModel):
     cards: List[Card]
     count: int
@@ -218,52 +213,6 @@ async def add_cards(payload: Union[CardCreate, List[CardCreate]], _auth=Depends(
         )
     batch.commit()
     return InsertResponse(inserted=len(ids), ids=ids)
-
-
-@app.post("/attempt", response_model=CardResponse)
-async def record_attempt(req: AttemptRequest, _auth=Depends(require_auth)):
-    try:
-        quality = rating_to_quality(req.rating)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    client = get_firestore_client()
-    doc_ref = client.collection("cards").document(str(req.card_id))
-    snap = doc_ref.get()
-    if not snap.exists:
-        raise HTTPException(status_code=404, detail="Card not found")
-
-    data = snap.to_dict() or {}
-    easiness = float(data.get("easiness", 2.5))
-    repetitions = int(data.get("repetitions", 0))
-    interval_days = int(data.get("interval_days", 0))
-
-    ef, reps, interval = sm2_update(easiness, repetitions, interval_days, quality)
-    due = utc_now() + timedelta(days=interval)
-
-    # Update card atomically using transaction
-    @firestore.transactional
-    def update_card(transaction, ref):
-        transaction.update(
-            ref,
-            {
-                "easiness": ef,
-                "repetitions": reps,
-                "interval_days": interval,
-                "due_at": due,
-            },
-        )
-
-    transaction = client.transaction()
-    update_card(transaction, doc_ref)
-
-    # Log attempt in subcollection
-    attempts_ref = doc_ref.collection("attempts").document()
-    attempts_ref.set({"rating": quality, "timestamp": utc_now()})
-
-    updated = doc_ref.get()
-    return CardResponse(card=card_doc_to_model(updated))
-
 
 class AttemptBatchItem(BaseModel):
     card_id: str

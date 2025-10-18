@@ -164,39 +164,6 @@ paths:
         '400':
           description: Invalid input
 
-  /attempt:
-    post:
-      operationId: recordAttempt
-      tags: [flashcards]
-      summary: Record an attempt and update the schedule
-      x-openai-isConsequential: false
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AttemptRequest'
-            examples:
-              good:
-                value: { card_id: "abc123", rating: "good" }
-              again:
-                value: { card_id: "abc123", rating: 1 }
-      responses:
-        '200':
-          description: Updated card returned
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  card:
-                    $ref: '#/components/schemas/Card'
-                required: [card]
-        '400':
-          description: Invalid input
-        '404':
-          description: Card not found
-
   /attempts:
     post:
       operationId: recordAttempts
