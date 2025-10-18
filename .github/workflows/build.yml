@@ -25,10 +25,8 @@ jobs:
         uses: google-github-actions/auth@v2
         with:
           # Recommended: Workload Identity Federation
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-          # Fallback: Service Account Key JSON
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
 
       - name: Set up gcloud SDK
         uses: google-github-actions/setup-gcloud@v2
